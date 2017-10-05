@@ -1,6 +1,5 @@
 // var staticCacheName = 'wittr-static-**versioning**';
-var staticCacheName = 'wittr-static-4';
-// asdfssddf!
+var staticCacheName = 'wittr-static-5';
 self.addEventListener('install', function(event) {
   // cache /skeleton rather than the root page
   var urlsToCache = [

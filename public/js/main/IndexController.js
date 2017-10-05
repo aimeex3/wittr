@@ -27,9 +27,15 @@ export default function IndexController(container) {
   this._postsView = new PostsView(this._container);
   this._toastsView = new ToastsView(this._container);
   this._lostConnectionToast = null;
-  this._openSocket();
   this._dbPromise = openDatabase();
   this._registerServiceWorker();
+
+  var indexController = this;
+
+  this._showCachedMessages()
+    .then(function() {
+      indexController._openSocket();
+    });
 }
 
 IndexController.prototype._registerServiceWorker = function() {
@@ -70,6 +76,29 @@ IndexController.prototype._registerServiceWorker = function() {
       window.location.reload();
     });
   }
+};
+
+IndexController.prototype._showCachedMessages = function() {
+  var indexController = this;
+
+  return this._dbPromise
+    .then(function(db) {
+      // if we're already show posts, eg shift-refresh or the very first load, no point in fetching from IDB
+      if (!db || indexController._postsView.showingPosts()) {
+        return;
+      }
+
+      // get all of wittr message object from indexedDB, then pass them to indexController._postsView.addPosts(messages)
+      // in order of date, starting with the latest
+      // return promise so websocket isn't opened until you're done
+      var tx = db.transaction('wittrs');
+      var store = tx.objectStore('wittrs');
+      var timeIndex = store.index('by-date');
+      return timeIndex.getAll();
+    })
+    .then(function(messages) {
+      return indexController._postsView.addPosts(messages.reverse());
+    });
 };
 
 IndexController.prototype._trackInstalling = function(worker) {
