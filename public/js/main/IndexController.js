@@ -8,7 +8,72 @@ export default function IndexController(container) {
   this._toastsView = new ToastsView(this._container);
   this._lostConnectionToast = null;
   this._openSocket();
+  this._registerServiceWorker();
 }
+
+IndexController.prototype._registerServiceWorker = function() {
+  if (navigator.serviceWorker) {
+    var indexController = this;
+    navigator.serviceWorker.register('/sw.js')
+      .then(function(reg) {
+        // if there's no controller, this page wasn't loaded via sw, so it's the latest version
+        if (!navigator.serviceWorker.controller) {
+          return;
+        }
+        // if there's an updated worker already waiting, show toast
+        if (reg.waiting) {
+          indexController._updateReady(reg.waiting);
+          return;
+        }
+        // if there's an updated worker installing, track progress
+        // if it becomes installed, show toast
+        if (reg.installing) {
+          indexController._trackInstalling(reg.installing);
+          return;
+        }
+        // listen for new installing workers arriving
+        // if one arrives, track progress
+        // if it becomes installed, show toast
+        reg.addEventListener('updatefound', function() {
+          indexController._trackInstalling(reg.installing);
+        });
+
+        console.log('Successfully registered');
+      })
+      .catch(function() {
+        console.log('failed to register');
+      });
+
+    // listen for controll service worker changing and reload the page
+    navigator.serviceWorker.addEventListener('controllerchange', function() {
+      window.location.reload();
+    });
+  }
+};
+
+IndexController.prototype._trackInstalling = function(worker) {
+  var indexController = this;
+  worker.addEventListener('statechange', function() {
+    if (worker.state === 'installed') {
+      indexController._updateReady(worker);
+    }
+  });
+};
+
+IndexController.prototype._updateReady = function(worker) {
+  var toast = this._toastsView.show('New version available', {
+    buttons: ['refresh', 'dismiss']
+  });
+
+  toast.answer
+    .then(function(answer) {
+      if (answer !== 'refresh') {
+        return;
+      }
+      // tell service worker to skipwaiting
+      worker.postMessage({action: 'skipWaiting'});
+    });
+};
 
 // open a connection to the server for live updates
 IndexController.prototype._openSocket = function() {
