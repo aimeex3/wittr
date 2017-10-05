@@ -72,8 +72,15 @@ IndexController.prototype._registerServiceWorker = function() {
       });
 
     // listen for controll service worker changing and reload the page
+    // ensure refresh is only called once
+    // works around bug in 'force update on reload'
+    var refreshing;
     navigator.serviceWorker.addEventListener('controllerchange', function() {
+      if (refreshing) {
+        return;
+      }
       window.location.reload();
+      refreshing = true;
     });
   }
 };
@@ -185,6 +192,23 @@ IndexController.prototype._onSocketMessage = function(data) {
       messages.forEach(function(message) {
         wittrsStore.put(message);
       });
+
+      // keep newest 30 entries in 'wittrs' but delete the rest
+      // use .openCursor(null, 'prev') to open a cursor that goes through an index/store backwards
+      wittrsStore.index('by-date')
+        .openCursor(null, 'prev')
+        .then(function(cursor) {
+          return cursor.advance(30);
+        })
+        .then(function deleteRest(cursor) {
+          if (!cursor) {
+            return;
+          }
+          cursor.delete();
+          return cursor.continue()
+            .then(deleteRest);
+        });
+
       return tx.complete;
     });
 

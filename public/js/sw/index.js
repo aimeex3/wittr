@@ -1,5 +1,11 @@
 // var staticCacheName = 'wittr-static-**versioning**';
-var staticCacheName = 'wittr-static-5';
+var staticCacheName = 'wittr-static-6';
+var contentImgsCache = 'wittr-content-imgs';
+var allCaches = [
+  staticCacheName,
+  contentImgsCache
+];
+
 self.addEventListener('install', function(event) {
   // cache /skeleton rather than the root page
   var urlsToCache = [
@@ -32,7 +38,7 @@ self.addEventListener('activate', function(event) {
       .then(function(cacheNames) {
         return Promise.all(
           cacheNames.filter(function(cacheName) {
-            return cacheName.startsWith('wittr-') && cacheName !== staticCacheName;
+            return cacheName.startsWith('wittr-') && !allCaches.includes(cacheName);
           }).map(function(cacheName) {
             return caches.delete(cacheName);
           })
@@ -74,6 +80,11 @@ self.addEventListener('fetch', function(event) {
       event.respondWith(caches.match('/skeleton'));
       return;
     }
+
+    if(requestUrl.pathname.startsWith('/photos/')) {
+      event.respondWith(servePhoto(event.request));
+      return;
+    }
   }
 
   event.respondWith(
@@ -86,6 +97,32 @@ self.addEventListener('fetch', function(event) {
       })
   );
 });
+
+function servePhoto(request) {
+  // /photos/9-3322-33323423423-234234234234-800px.jpg
+  // storageUrl stores url without the size (-800px.jpg)
+  // store only one copy of each photo
+  var storageUrl = request.url.replace(/-\d+px\.jpg$/, '');
+
+  // return images from 'wittr-content-imgs' cache if they are there
+  // othwerise, fetch images from network, put in cache, and send back to browser
+  // cache.put supports a plain url as the first param
+
+  return caches.open(contentImgsCache)
+    .then(function(cache) {
+      return cache.match(storageUrl)
+        .then(function(response) {
+          if (response) {
+            return response;
+          }
+          return fetch(request)
+            .then(function(networkResponse) {
+              cache.put(storageUrl, networkResponse.clone());
+              return networkResponse;
+            });
+        });
+    });
+}
 
 // listen for message event and call skip waiting if you get appropriate message
 self.addEventListener('message', function(event) {
