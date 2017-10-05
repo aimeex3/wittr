@@ -29,8 +29,14 @@ export default function IndexController(container) {
   this._lostConnectionToast = null;
   this._dbPromise = openDatabase();
   this._registerServiceWorker();
+  this._cleanImageCache();
 
   var indexController = this;
+
+  // user may leave browser open so clean image cache every 5 min
+  setInterval(function() {
+    indexController._cleanImageCache();
+  }, 1000* 60 * 5);
 
   this._showCachedMessages()
     .then(function() {
@@ -176,6 +182,46 @@ IndexController.prototype._openSocket = function() {
     }, 5000);
   });
 };
+
+IndexController.prototype._cleanImageCache = function() {
+  return this._dbPromise.then(function(db) {
+    if (!db) {
+      return;
+    }
+
+    // open the 'wittr' object store, get all the messages, gather all photo urls
+
+    // open the 'wittr-content-imgs' cache, and delete any entry that you no longer need
+
+    var imagesNeeded = [];
+    var tx = db.transaction('wittrs');
+    return tx.objectStore('wittrs')
+      .getAll()
+      .then(function(messages) {
+        messages.forEach(function(message) {
+          if (message.photo) {
+            imagesNeeded.push(message.photo);
+          }
+          imagesNeeded.push(message.avatar);
+        });
+
+        return caches.open('wittr-content-imgs');
+      })
+      .then(function(cache) {
+        return cache.keys()
+          .then(function(requests) {
+            requests.forEach(function(request) {
+              var url = new URL(request.url);
+              if (!imagesNeeded.includes(url.pathname)) {
+                cache.delete(request);
+              }
+            });
+          });
+      });
+
+  });
+};
+
 
 // called when the web socket sends message data
 IndexController.prototype._onSocketMessage = function(data) {
