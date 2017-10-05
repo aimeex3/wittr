@@ -76,13 +76,18 @@ self.addEventListener('fetch', function(event) {
   var requestUrl = new URL(event.request.url);
 
   if (requestUrl.origin === location.origin) {
-    if(requestUrl.pathname === '/') {
+    if (requestUrl.pathname === '/') {
       event.respondWith(caches.match('/skeleton'));
       return;
     }
 
-    if(requestUrl.pathname.startsWith('/photos/')) {
+    if (requestUrl.pathname.startsWith('/photos/')) {
       event.respondWith(servePhoto(event.request));
+      return;
+    }
+
+    if (requestUrl.pathname.startsWith('/avatars/')) {
+      event.respondWith(serveAvatar(event.request));
       return;
     }
   }
@@ -97,6 +102,23 @@ self.addEventListener('fetch', function(event) {
       })
   );
 });
+
+function serveAvatar(request) {
+  var storageUrl = request.url.replace(/-\d+x\.jpg$/, '');
+  return caches.open(contentImgsCache)
+    .then(function(cache) {
+      return cache.match(storageUrl)
+        .then(function(response) {
+          var networkFetch = fetch(request)
+            .then(function(networkResponse) {
+              cache.put(storageUrl, networkResponse.clone());
+              return networkResponse;
+            });
+
+          return response || networkFetch();
+        });
+    });
+}
 
 function servePhoto(request) {
   // /photos/9-3322-33323423423-234234234234-800px.jpg
